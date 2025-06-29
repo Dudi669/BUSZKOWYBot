@@ -1,67 +1,61 @@
+import os
 import telebot
 from telebot import types
-import os
 
-BOT_TOKEN = os.getenv("BOT_TOKEN")
-ADMIN_ID = 6998345138
+TOKEN = os.getenv('BOT_TOKEN')
+bot = telebot.TeleBot(TOKEN)
 
-bot = telebot.TeleBot(BOT_TOKEN)
 user_data = {}
 
-# Start
 @bot.message_handler(commands=['start'])
 def send_welcome(message):
     markup = types.ReplyKeyboardMarkup(resize_keyboard=True, one_time_keyboard=True)
     markup.add("💎 Kryształ", "🥦 Buch")
-    bot.send_message(message.chat.id, "Wybierz produkt / Choose product:", reply_markup=markup)
+    bot.send_message(message.chat.id, "Wybierz produkt:", reply_markup=markup)
 
-# Produkt
 @bot.message_handler(func=lambda m: m.text in ["💎 Kryształ", "🥦 Buch"])
 def choose_quantity(message):
     user_data[message.chat.id] = {'produkt': message.text}
     markup = types.ReplyKeyboardMarkup(resize_keyboard=True, one_time_keyboard=True)
     markup.add("1", "2", "3", "5")
-    bot.send_message(message.chat.id, "Ile sztuk? / How many?", reply_markup=markup)
+    bot.send_message(message.chat.id, f"Ile sztuk {message.text} chcesz?", reply_markup=markup)
 
-# Ilość
 @bot.message_handler(func=lambda m: m.text in ["1", "2", "3", "5"])
 def choose_delivery(message):
     if message.chat.id in user_data:
         user_data[message.chat.id]['ilosc'] = message.text
     markup = types.ReplyKeyboardMarkup(resize_keyboard=True, one_time_keyboard=True)
     markup.add("🏠 Dowóz", "🏪 Stacjonarnie")
-    bot.send_message(message.chat.id, "Wybierz sposób odbioru / Delivery method:", reply_markup=markup)
+    bot.send_message(message.chat.id, "Wybierz sposób odbioru:", reply_markup=markup)
 
-# Sposób odbioru
 @bot.message_handler(func=lambda m: m.text in ["🏠 Dowóz", "🏪 Stacjonarnie"])
-def finalize(message):
+def final_order(message):
     if message.chat.id in user_data:
         user_data[message.chat.id]['odbior'] = message.text
         produkt = user_data[message.chat.id]['produkt']
         ilosc = user_data[message.chat.id]['ilosc']
-        odbior = message.text
+        odbior = user_data[message.chat.id]['odbior']
 
-        if odbior == "🏪 Stacjonarnie":
-            odbior += "\nBywam w różnych miejscach – pisz na @mordeczka420"
-            bot.send_message(message.chat.id, "Bywam w różnych miejscach – pisz bezpośrednio na @mordeczka420")
-            uwagi = "Brak"
-            address = "Stacjonarnie"
+        if odbior == "🏠 Dowóz":
+            msg = bot.send_message(message.chat.id, "Podaj adres dowozu:")
+            bot.register_next_step_handler(msg, get_address)
         else:
-            msg = bot.send_message(message.chat.id, "Podaj adres dostawy / Send delivery address:")
-            bot.register_next_step_handler(msg, lambda m: finish_order(m, produkt, ilosc, m.text))
+            bot.send_message(message.chat.id,
+                             f"✅ Zamówienie:\nProdukt: {produkt}\nIlość: {ilosc}\nOdbiór: {odbior}\n\nBędę bywał w różnych miejscach, więc pisz do mnie bezpośrednio na @mordeczka420.")
+            # Tutaj możesz wysłać zamówienie do admina
 
-        if odbior == "🏪 Stacjonarnie":
-            finish_order(message, produkt, ilosc, "Stacjonarnie – @mordeczka420")
+def get_address(message):
+    address = message.text
+    chat_id = message.chat.id
+    produkt = user_data[chat_id]['produkt']
+    ilosc = user_data[chat_id]['ilosc']
+    odbior = user_data[chat_id]['odbior']
 
-def finish_order(message, produkt, ilosc, adres):
-    zamowienie = f"""
-🛒 Nowe zamówienie:
-👤 Użytkownik: @{message.from_user.username or 'brak'} ({message.chat.id})
-🧪 Produkt: {produkt}
-📦 Ilość: {ilosc}
-🚚 Odbiór: {adres}
-    """
-    bot.send_message(message.chat.id, "✅ Zamówienie przyjęte! / Order confirmed.")
-    bot.send_message(ADMIN_ID, zamowienie)
+    bot.send_message(chat_id,
+                     f"✅ Zamówienie:\nProdukt: {produkt}\nIlość: {ilosc}\nOdbiór: {odbior}\nAdres dowozu: {address}\n\nDziękujemy!")
+    # Tutaj wyślij dane do admina @mordeczka420
+    admin_id = 6998345138
+    bot.send_message(admin_id,
+                     f"Nowe zamówienie:\nProdukt: {produkt}\nIlość: {ilosc}\nOdbiór: {odbior}\nAdres: {address}\nUżytkownik: @{message.from_user.username or message.from_user.first_name}")
 
 bot.infinity_polling()
